@@ -8,7 +8,7 @@
 //   src/content.js           — this file: orchestrator + feature implementations
 // ===========================================================================
 
-import { queryAll, extractId, findSidebarRoot } from './compat/selectors.js';
+import { queryAll, extractId, findSidebarRoot, findHistorySidebar, sidebarChatLinks, sidebarLandmark } from './compat/selectors.js';
 import { setupTitleRename } from './rename.js';
 import { modusIcon } from './ui-icons.js';
 import { conversationId } from './context-data.js';
@@ -124,7 +124,7 @@ function _resolveChatId(id) {
 function _rememberPendingId() {
   const id = _chatIdFromPath();
   if (!id?.startsWith('WEB:')) return;
-  const link = [...queryAll('sidebarLink', _getHistoryNav() ?? document)]
+  const link = sidebarChatLinks(_getHistoryNav())
     .find(el => extractId(el.getAttribute('href')) === id);
   const title = (link?.innerText || document.title || '').trim().slice(0, 160);
   _storeSet({ [PENDING_ID_KEY]: { id, title, at: Date.now() } }).catch(() => {});
@@ -162,41 +162,40 @@ function _migrateChatId(oldId, newId) {
 const selectionInputs = new WeakMap();
 
 function injectCheckboxes() {
-  const links = queryAll('sidebarLink', _getHistoryNav() ?? document);
-  if (!links.length) return;
+  const nav = _getHistoryNav();
+  const links = sidebarChatLinks(nav);
+  const controlsInUse = new Set();
   links.forEach((link, idx) => {
-    const rawChatId = extractId(link.getAttribute('href'));
+    const rawChatId = extractId(link.pathname);
     if (!rawChatId) return;
     const chatId = _resolveChatId(rawChatId) || rawChatId;
     const previousId = link.dataset.cgptId;
-    if (link.dataset.cgptItem && previousId === chatId) {
-      const checkbox = selectionInputs.get(link);
-      if (checkbox) {
-        checkbox.dataset.index = idx;
-        checkbox.checked = _selectedIds.has(chatId);
-      }
-      return;
-    }
-    _trackPathAlias(previousId, chatId);
-    if (link.dataset.cgptItem) {
-      link.dataset.cgptId = chatId;
-      const existingCb = selectionInputs.get(link);
-      if (existingCb) {
-        existingCb.dataset.chatId = chatId;
-        existingCb.dataset.index = idx;
-        existingCb.checked = _selectedIds.has(chatId);
-      }
-      return;
-    }
-
-    link.dataset.cgptItem = '1';
+    if (previousId !== chatId) _trackPathAlias(previousId, chatId);
     link.dataset.cgptId = chatId;
-    link.dataset.cgptIndex = idx;
     link.classList.add('cgpt-bulk-item');
+    const name = link.getAttribute('aria-label') || link.textContent.trim() || 'chat';
+    const existing = selectionInputs.get(link);
+    const parent = link.parentElement;
+    const row = parent && parent.querySelectorAll(':scope > a[href]').length === 1 &&
+      getComputedStyle(parent).display !== 'contents' ? parent : link;
+    if (existing?.parentElement?.parentElement === row) {
+      controlsInUse.add(existing.parentElement);
+      existing.dataset.index = idx;
+      existing.dataset.chatId = chatId;
+      existing.checked = _selectedIds.has(chatId);
+      existing.setAttribute('aria-label', `Select ${name}`);
+      return;
+    }
+    const previousRow = existing?.parentElement?.parentElement;
+    existing?.parentElement?.remove();
+    if (previousRow && !previousRow.querySelector(':scope > .cgpt-select-control')) {
+      previousRow.classList.remove('cgpt-select-row');
+      previousRow.removeAttribute('data-modus-select-position');
+    }
 
     const cb = document.createElement('input');
     cb.type = 'checkbox'; cb.className = 'cgpt-cb';
-    cb.setAttribute('aria-label', `Select ${link.getAttribute('aria-label') || link.textContent.trim() || 'chat'}`);
+    cb.setAttribute('aria-label', `Select ${name}`);
     cb.dataset.chatId = chatId; cb.dataset.index = idx;
     cb.checked = _selectedIds.has(chatId);
 
@@ -205,20 +204,22 @@ function injectCheckboxes() {
     cb.addEventListener('change', e => {
       e.stopPropagation();
       const currentChatId = cb.dataset.chatId || chatId;
-      if (shiftSelection && _lastCb?.isConnected && _lastCb !== cb) {
+      const currentNav = _getHistoryNav();
+      const controls = currentNav?.querySelectorAll('.cgpt-cb') || [];
+      if (shiftSelection && currentNav?.contains(_lastCb) && _lastCb !== cb) {
         const lo = Math.min(+_lastCb.dataset.index, +cb.dataset.index);
         const hi = Math.max(+_lastCb.dataset.index, +cb.dataset.index);
         const st = _lastCb.checked;
-        document.querySelectorAll('.cgpt-cb').forEach(o => {
+        controls.forEach(o => {
           const i = +o.dataset.index;
           if (i >= lo && i <= hi) {
-            o.checked = st;
             st ? _selectedIds.add(o.dataset.chatId) : _selectedIds.delete(o.dataset.chatId);
           }
         });
       } else {
         cb.checked ? _selectedIds.add(currentChatId) : _selectedIds.delete(currentChatId);
       }
+      for (const control of controls) control.checked = _selectedIds.has(control.dataset.chatId);
       _lastCb = cb;
       _renderActionBar();
     });
@@ -228,17 +229,34 @@ function injectCheckboxes() {
     appearance.className = 'cgpt-select-mark';
     appearance.innerHTML = modusIcon('check');
     select.append(cb, appearance);
+    controlsInUse.add(select);
     selectionInputs.set(link, cb);
-    const parent = link.parentElement;
-    if (parent && parent.querySelectorAll(':scope > a[href]').length === 1) {
-      parent.classList.add('cgpt-select-row');
+    const { position } = getComputedStyle(row);
+    if (!position || position === 'static') {
+      row.setAttribute('data-modus-select-position', '');
+    }
+    if (row !== link) {
+      row.classList.add('cgpt-select-row');
       link.before(select);
     } else {
       link.prepend(select);
     }
-
-
   });
+  for (const control of document.querySelectorAll('.cgpt-select-control')) {
+    if (controlsInUse.has(control)) continue;
+    const row = control.parentElement;
+    const link = row.matches('a.cgpt-bulk-item') ? row : control.nextElementSibling;
+    control.remove();
+    if (!row.querySelector(':scope > .cgpt-select-control')) {
+      row.classList.remove('cgpt-select-row');
+      row.removeAttribute('data-modus-select-position');
+    }
+    if (link?.matches('a.cgpt-bulk-item') && !links.includes(link)) {
+      link.classList.remove('cgpt-bulk-item');
+      delete link.dataset.cgptId;
+    }
+  }
+  if (_selectedIds.size) _renderActionBar(nav);
 }
 
 // ---------------------------------------------------------------------------
@@ -256,9 +274,10 @@ function selectionButton(label, icon, action, style = '') {
   return button;
 }
 
-function _renderActionBar() {
+function _renderActionBar(nav = _getHistoryNav()) {
   let bar = document.getElementById('cgpt-action-bar');
   if (!_selectedIds.size) { bar?.remove(); return; }
+  const host = document.fullscreenElement || document.body;
   if (!bar) {
     bar = document.createElement('section');
     bar.id = 'cgpt-action-bar';
@@ -279,11 +298,21 @@ function _renderActionBar() {
     actions.append(exportButton, selectionButton('Archive', 'archive', () => _bulkAction('archive')),
       selectionButton('Delete', 'trash', () => _bulkAction('delete'), 'cgpt-is-danger'));
     bar.append(summary, actions);
-    document.body.appendChild(bar);
   }
-  const nav = _getHistoryNav()?.getBoundingClientRect();
-  if (nav?.width) bar.style.setProperty('--cgpt-selection-width', `${Math.round(nav.width)}px`);
-  if (!_bulkRunning) bar.querySelector('#cgpt-count').textContent = `${_selectedIds.size} selected`;
+  if (bar.parentElement !== host) host.append(bar);
+  const bounds = nav?.getBoundingClientRect();
+  const sidebarVisible = nav && host.contains(nav);
+  bar.hidden = !sidebarVisible;
+  if (bounds?.width) {
+    const left = Math.max(0, bounds.left);
+    const right = Math.min(innerWidth, bounds.right);
+    bar.hidden = !sidebarVisible || right <= left;
+    bar.style.setProperty('--cgpt-selection-left', `${left}px`);
+    bar.style.setProperty('--cgpt-selection-width', `${right - left}px`);
+  }
+  const count = bar.querySelector('#cgpt-count');
+  const label = `${_selectedIds.size} selected`;
+  if (!_bulkRunning && count.textContent !== label) count.textContent = label;
 
 }
 
@@ -338,7 +367,8 @@ async function _waitForControl(find, timeout = 2500) {
 }
 
 function _findChatActions(link) {
-  for (let row = link; row && (row === link || queryAll('sidebarLink', row).length === 1); row = row.parentElement) {
+  const links = 'a[href*="/c/"], a[href*="/uc/"]';
+  for (let row = link; row && (row === link || row.querySelectorAll(links).length === 1); row = row.parentElement) {
     const trigger = row.querySelector('button[aria-label="Chat actions"], button[data-testid="history-item-options"], button[data-testid*="conversation-options"]');
     if (trigger) return trigger;
   }
@@ -464,10 +494,10 @@ let compactSources = [];
 let exploreObserver;
 
 function _getHistoryNav() {
-  return document.querySelector('[aria-label="Chat history"]') || findSidebarRoot();
+  return findHistorySidebar();
 }
 
-function _findNewChatElement(nav = _getHistoryNav()) {
+function _findNewChatElement(nav = findSidebarRoot()) {
   return [...(nav?.querySelectorAll('a, button') || [])].find(element =>
     element.matches('[data-testid="create-new-chat-button"], [data-octane-navigation-item="new_chat"]') ||
     (element.getAttribute('aria-label') || element.textContent).trim().toLowerCase() === 'new chat');
@@ -545,8 +575,8 @@ function _connectExploreShortcut(button, native) {
 }
 
 function setupCompactSidebar() {
-  const nav = _getHistoryNav();
-  if (!nav) return;
+  const nav = findSidebarRoot() || _getHistoryNav();
+  if (!nav) { _clearCompactSidebar(); return; }
   const sources = [];
   const seen = new Set();
   for (const native of nav.querySelectorAll('a, button')) {
@@ -632,7 +662,7 @@ function setupDateGroups() {
   const nav = _getHistoryNav();
   if (!nav) return;
   const groups = new Map();
-  for (const link of queryAll('sidebarLink', nav)) {
+  for (const link of sidebarChatLinks(nav)) {
     const date = conversationDates.get(extractId(link.getAttribute('href')));
     const bucket = date ? _bucket(date.time) : null;
     const actions = _findChatActions(link);
@@ -684,8 +714,8 @@ function _findChatLink(id) {
   const nav = _getHistoryNav();
   if (!nav) return null;
   const resolved = _resolveChatId(id) || id;
-  return [...queryAll('sidebarLink', nav)].find(link =>
-    _resolveChatId(extractId(link.getAttribute('href'))) === resolved) || null;
+  const matches = sidebarChatLinks(nav).filter(link => _resolveChatId(extractId(link.pathname)) === resolved);
+  return matches.find(link => link.getClientRects().length && _findChatActions(link)) || matches[0] || null;
 }
 
 // ---------------------------------------------------------------------------
@@ -882,22 +912,25 @@ const _mutObs = new MutationObserver(mutations => {
       if (changed.length && changed.every(node => node.nodeType === 1 &&
         node.matches('[id^="cgpt-"], [class^="cgpt-"], [data-cgpt-dg-hdr], [data-modus-title]'))) continue;
     }
-    if (element.closest('main, #main, [role="region"][aria-label="Conversation"]')) {
+    const layoutRegion = 'header, [role="banner"], [role="toolbar"], [role="tablist"], ' + sidebarLandmark;
+    if (element.closest(layoutRegion) || (mutation.type === 'childList' &&
+      [...mutation.addedNodes, ...mutation.removedNodes].some(node => node.nodeType === 1 &&
+        (node.matches(layoutRegion + ', main, [role="main"]') ||
+          node.querySelector(layoutRegion + ', main, [role="main"]'))))) {
+      scheduleRefresh();
+    } else if (element.closest('main, #main, [role="region"][aria-label="Conversation"]')) {
       scheduleLog();
       if (mutation.type === 'childList' && [...mutation.addedNodes].some(node => node.nodeType === 1 &&
         (node.matches('[data-message-author-role], [data-message-role]') ||
           node.querySelector('[data-message-author-role], [data-message-role]')))) scheduleRefresh();
-    } else if (mutation.type !== 'characterData' &&
-      (element.closest('[aria-label="Chat history"], header') || [...mutation.addedNodes].some(node =>
-        node.nodeType === 1 && (node.matches('header, [aria-label="Chat history"]') || node.querySelector('header, [aria-label="Chat history"]'))))) {
-      scheduleRefresh();
     }
   }
 });
 
 window.navigation?.addEventListener('currententrychange', _onNav);
 window.addEventListener('popstate', _onNav);
-window.addEventListener('resize', () => positionInspector());
+window.addEventListener('resize', () => { positionInspector(); scheduleRefresh(); });
+document.addEventListener('fullscreenchange', scheduleRefresh);
 document.addEventListener('pointerup', () => { if (_uiReady) scheduleRefresh(); });
 
 // ---------------------------------------------------------------------------
@@ -916,10 +949,10 @@ function _apply(key) {
       if (_s.bulkActions) { injectCheckboxes(); break; }
       document.querySelectorAll('.cgpt-select-control').forEach(control => control.remove());
       document.querySelectorAll('.cgpt-select-row').forEach(row => row.classList.remove('cgpt-select-row'));
+      document.querySelectorAll('[data-modus-select-position]').forEach(row => row.removeAttribute('data-modus-select-position'));
       document.querySelectorAll('.cgpt-bulk-item').forEach(link => {
-        link.style.removeProperty('position'); link.style.removeProperty('overflow'); link.style.removeProperty('padding-left');
         link.classList.remove('cgpt-bulk-item');
-        delete link.dataset.cgptItem; delete link.dataset.cgptId; delete link.dataset.cgptIndex;
+        delete link.dataset.cgptId;
       });
       document.getElementById('cgpt-action-bar')?.remove();
       _selectedIds.clear(); _lastCb = null;
@@ -957,7 +990,7 @@ async function boot() {
   _reconcilePendingId();
   if (_s.lagFix) setupVirtualization();
   renderInspector();
-  _mutObs.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['href'] });
+  _mutObs.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['href', 'hidden', 'aria-hidden', 'inert'] });
   scheduleRefresh();
   scheduleLog();
 }

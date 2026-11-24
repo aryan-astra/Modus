@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Modus",
-  "version": "3.9.5",
+  "version": "3.9.6",
   "description": "Typing lag fix, bulk sidebar management, model badge, context awareness, inline chat rename, and export.",
   "permissions": [
-    "storage"
+    "storage",
+    "alarms"
   ],
   "background": {
     "service_worker": "background.js",

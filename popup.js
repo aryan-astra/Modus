@@ -1,4 +1,5 @@
 import { loadSettings } from './src/settings.js';
+import { availableUpdate, checkReleaseMessage, releaseStateKey } from './src/release-updates.js';
 
 const groups = {
   activity: [
@@ -113,4 +114,30 @@ async function init() {
   }
 }
 
+function showReleaseUpdate(update) {
+  const notice = document.getElementById('release-notice');
+  const announcement = document.getElementById('release-announcement');
+  const link = document.getElementById('release-link');
+  if (!update) {
+    notice.hidden = true;
+    link.removeAttribute('href');
+    announcement.textContent = '';
+    return;
+  }
+  const label = 'Modus v' + update.version + ' is ready to download';
+  link.href = update.url;
+  notice.hidden = false;
+  document.getElementById('release-version').textContent = label;
+  if (announcement.textContent !== label) announcement.textContent = label;
+}
+
+async function refreshPopupRelease() {
+  const { version } = chrome.runtime.getManifest();
+  const stored = await chrome.storage.local.get(releaseStateKey).catch(() => ({}));
+  showReleaseUpdate(availableUpdate(stored[releaseStateKey], version));
+  const update = await chrome.runtime.sendMessage(checkReleaseMessage);
+  if (update !== undefined) showReleaseUpdate(update);
+}
+
 init().catch(() => showError('Could not load Modus settings.'));
+refreshPopupRelease().catch(() => {});

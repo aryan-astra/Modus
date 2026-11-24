@@ -52,7 +52,8 @@ function jsonResponse(path, body) {
 }
 
 it('ships passive MAIN-world and isolated scripts without header access', async () => {
-  assert.deepEqual(manifest.permissions, ['storage']);
+  assert.deepEqual(manifest.permissions, ['storage', 'alarms']);
+  assert.equal(manifest.host_permissions, undefined);
   assert.ok(manifest.content_scripts.every(spec => spec.run_at === 'document_start'));
   assert.ok(manifest.content_scripts.some(spec => spec.world === 'MAIN' && spec.js.includes('net-sniffer.js')));
   assert.doesNotMatch(content, /\bfetch\s*\(|\bXMLHttpRequest\b/);
@@ -169,6 +170,81 @@ it('archives a selected sidebar row through its own native menu', async t => {
   const archive = await waitFor(() => [...document.querySelectorAll('#cgpt-action-bar button')].find(button => button.textContent === 'Archive'));
   archive.click();
   await waitFor(() => !row.isConnected && !document.querySelector('#cgpt-action-bar'));
+});
+
+it('keeps Activity clear of the centered Chat and Work tabs on a new chat', async t => {
+  const { dom, window } = fakePage('/');
+  t.after(() => dom.window.close());
+  const { document } = window;
+  Object.defineProperties(window, { innerWidth: { value: 1280 }, innerHeight: { value: 800 } });
+  document.body.insertAdjacentHTML('afterbegin', `<header>
+    <nav role="tablist"><a role="tab" href="/">Chat</a><button role="tab">Work</button></nav>
+    <button aria-label="Temporary chat">Temporary chat</button>
+  </header>`);
+  const rect = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height });
+  let tabWidth = 250;
+  const tabs = document.querySelector('[role="tablist"]');
+  const native = document.querySelector('[aria-label="Temporary chat"]');
+  document.querySelector('main').getBoundingClientRect = () => rect(260, 0, 1020, 800);
+  document.querySelector('header').getBoundingClientRect = () => rect(260, 0, 1020, 58);
+  tabs.getBoundingClientRect = () => rect(700, 8, tabWidth, 40);
+  tabs.firstElementChild.getBoundingClientRect = () => rect(700, 8, tabWidth / 2, 40);
+  tabs.lastElementChild.getBoundingClientRect = () => rect(700 + tabWidth / 2, 8, tabWidth / 2, 40);
+  native.getBoundingClientRect = () => rect(1190, 8, 82, 40);
+  const getRect = window.Element.prototype.getBoundingClientRect;
+  window.Element.prototype.getBoundingClientRect = function () {
+    return this.id === 'cgpt-activity-button' ? rect(0, 0, 124, 36) : getRect.call(this);
+  };
+  window.eval(content);
+  const inspector = await waitFor(() => document.getElementById('cgpt-top-inspector'));
+  const left = () => Number.parseFloat(inspector.style.getPropertyValue('--cgpt-toolbar-left'));
+  assert.ok(left() >= tabs.getBoundingClientRect().right && left() + 124 <= native.getBoundingClientRect().left);
+  tabWidth = 440;
+  window.dispatchEvent(new window.Event('resize'));
+  await waitFor(() => left() + 124 < tabs.getBoundingClientRect().left);
+  assert.ok(left() >= 260);
+  tabs.getBoundingClientRect = () => rect(260, 8, 930, 40);
+  window.dispatchEvent(new window.Event('resize'));
+  await waitFor(() => Number.parseFloat(inspector.style.getPropertyValue('--cgpt-toolbar-top')) >= 48);
+});
+
+it('adds selection to Pinned, Projects and Recents alongside a separate history landmark', async t => {
+  const { dom, window, listeners } = fakePage('/c/test-chat');
+  t.after(() => dom.window.close());
+  const { document } = window;
+  document.body.innerHTML = `<nav aria-label="Sidebar"><button>New chat</button></nav>
+    <aside data-sidebar="workspace">
+      <section aria-label="Pinned"><div><a href="https://chatgpt.com/c/test-chat">Pinned example</a></div></section>
+      <section aria-label="Projects"><div><a href="/g/g-p-one/c/project-chat">Project chat</a></div></section>
+      <nav aria-label="Chat history"><div><a href="/c/test-chat">Recent example</a></div></nav>
+    </aside>
+    <main><a href="/c/reference">Link in chat</a></main>`;
+  window.eval(content);
+  await waitFor(() => document.querySelector('nav[aria-label="Chat history"] .cgpt-cb'));
+  const aside = document.querySelector('aside');
+  assert.equal(aside.querySelectorAll('.cgpt-cb').length, 3);
+  assert.equal(document.querySelector('main .cgpt-cb'), null);
+  aside.querySelector('.cgpt-cb').click();
+  assert.deepEqual([...aside.querySelectorAll('.cgpt-cb')].map(input => input.checked), [true, false, true]);
+  const recents = aside.querySelector('nav');
+  recents.replaceChildren();
+  recents.insertAdjacentHTML('afterbegin', '<div><a href="/c/test-chat">Recent example</a></div>');
+  await waitFor(() => recents.querySelector('.cgpt-cb')?.checked);
+  const row = aside.querySelector('section:nth-child(2) > div');
+  row.insertAdjacentHTML('afterend', '<div><a href="/c/loaded-later">Later chat</a></div>');
+  await waitFor(() => aside.querySelector('[data-chat-id="loaded-later"]'));
+  const fullscreen = document.createElement('div');
+  aside.before(fullscreen);
+  fullscreen.append(aside);
+  Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: fullscreen });
+  document.dispatchEvent(new window.Event('fullscreenchange'));
+  await waitFor(() => fullscreen.querySelector('#cgpt-action-bar'));
+  assert.ok(fullscreen.querySelector('#cgpt-top-inspector'));
+  const later = aside.querySelector('a[href="/c/loaded-later"]');
+  later.href = '/images';
+  await waitFor(() => !aside.querySelector('[data-chat-id="loaded-later"]'));
+  listeners[0]({ bulkActions: { newValue: false } }, 'local');
+  assert.equal(aside.querySelector('.cgpt-cb'), null);
 });
 
 

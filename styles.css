@@ -68,30 +68,35 @@
 #cgpt-top-inspector {
   position: fixed;
   z-index: 50;
-  inset-block-start: var(--cgpt-toolbar-top, 8px);
-  inset-inline-end: var(--cgpt-toolbar-right, 12px);
-  display: grid;
-  justify-items: end;
-  gap: var(--cgpt-space-2);
+  top: var(--cgpt-toolbar-top);
+  left: var(--cgpt-toolbar-left);
   pointer-events: none;
   font: inherit;
   color: var(--cgpt-ink);
 }
-.cgpt-topbtn { max-width: 168px; min-height: 36px; pointer-events: auto; font-size: 13px; }
+#cgpt-top-inspector:not([data-positioned]) { visibility: hidden; }
+#cgpt-top-inspector [hidden] { display: none !important; }
+.cgpt-topbtn {
+  max-width: min(168px, var(--cgpt-toolbar-max-width, 168px));
+  min-height: 36px;
+  pointer-events: auto;
+  font-size: 13px;
+  background: var(--cgpt-bg);
+}
 #cgpt-badge-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cgpt-activity-chevron .cgpt-icon { width: 13px; height: 13px; color: var(--cgpt-muted); }
 .cgpt-menu, .cgpt-context-warning {
   box-sizing: border-box;
-  width: min(286px, calc(100vw - 20px));
-  max-height: calc(100dvh - 76px);
+  position: fixed;
+  left: var(--cgpt-panel-left);
+  top: var(--cgpt-panel-top);
+  width: var(--cgpt-panel-width);
+  max-height: var(--cgpt-panel-height);
   overflow: auto;
   overscroll-behavior: contain;
   pointer-events: auto;
 }
 .cgpt-menu {
-  position: fixed;
-  inset-inline-end: min(var(--cgpt-toolbar-right, 12px), max(10px, calc(100vw - 296px)));
-  inset-block-start: calc(var(--cgpt-toolbar-top, 8px) + 42px);
   padding: var(--cgpt-space-3);
   animation: cgpt-enter var(--cgpt-motion);
   transform-origin: top right;
@@ -161,6 +166,7 @@
 .cgpt-inspector-footer .cgpt-ui-button { padding: 0 0 0 8px; min-height: 28px; font-size: 11px; color: var(--cgpt-muted); }
 .cgpt-inspector-footer .cgpt-icon { width: 14px; height: 14px; }
 .cgpt-context-warning { display: flex; align-items: center; gap: var(--cgpt-space-2); padding: var(--cgpt-space-2); }
+#cgpt-top-inspector:has(.cgpt-topbtn[aria-expanded="true"]) .cgpt-context-warning { display: none; }
 .cgpt-context-warning button { margin-inline-start: auto; padding: 0 8px; color: inherit; cursor: pointer; }
 
 #cgpt-icon-grid {
@@ -223,7 +229,7 @@
   border: 0; border-bottom: 1px solid currentColor; border-radius: 0; padding: 4px;
 }
 
-.cgpt-select-row, a.cgpt-bulk-item { position: relative; }
+[data-modus-select-position] { position: relative; }
 .cgpt-select-control {
   position: absolute;
   z-index: 2;
@@ -235,7 +241,7 @@
   height: 34px;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-4px, -50%) scale(.85);
+  transform: translateY(-50%) scale(.85);
   transition: opacity 145ms ease, transform 175ms cubic-bezier(.2,.75,.3,1);
 }
 .cgpt-select-row:is(:hover,:focus-within) > .cgpt-select-control,
@@ -243,7 +249,7 @@ a.cgpt-bulk-item:is(:hover,:focus-within) > .cgpt-select-control,
 .cgpt-select-control:has(input:checked) {
   opacity: 1;
   pointer-events: auto;
-  transform: translate(0, -50%) scale(1);
+  transform: translateY(-50%) scale(1);
 }
 a.cgpt-bulk-item { transition: padding-inline-start 175ms cubic-bezier(.2,.75,.3,1); }
 .cgpt-select-row:is(:hover,:focus-within,:has(input.cgpt-cb:checked)) > a.cgpt-bulk-item,
@@ -283,13 +289,14 @@ a.cgpt-bulk-item:has(> .cgpt-select-control):is(:hover,:focus-within,:has(input.
   border-color: transparent;
   box-shadow: none;
   z-index: 55;
-  inset-inline-start: var(--cgpt-space-2);
+  left: calc(var(--cgpt-selection-left, 0px) + var(--cgpt-space-2));
   inset-block-end: var(--cgpt-space-2);
   width: min(calc(var(--cgpt-selection-width, 246px) - 16px), calc(100vw - 16px));
   padding: var(--cgpt-space-2);
   animation: cgpt-enter var(--cgpt-motion);
   box-sizing: border-box;
 }
+#cgpt-action-bar[hidden] { display: none; }
 .cgpt-selection-summary, .cgpt-selection-actions { display: flex; flex-wrap: wrap; gap: var(--cgpt-space-1); align-items: center; }
 .cgpt-selection-summary { margin-bottom: var(--cgpt-space-1); color: var(--cgpt-muted); }
 #cgpt-count { flex: 1; font-weight: 650; white-space: nowrap; }
@@ -351,7 +358,6 @@ a.cgpt-bulk-item:has(> .cgpt-select-control):is(:hover,:focus-within,:has(input.
 @media (max-width: 600px) {
   .cgpt-topbtn { width: 36px; padding: 0; }
   #cgpt-badge-label, .cgpt-activity-chevron { display: none; }
-  .cgpt-context-warning { position: fixed; inset-inline-end: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .cgpt-menu, #cgpt-action-bar, #cgpt-export-sheet { animation: none; }

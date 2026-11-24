@@ -91,6 +91,7 @@ jobs:
             content.js \
             net-sniffer.js \
             src/settings.js \
+            src/release-updates.js \
             popup.html \
             popup.css \
             popup.js \

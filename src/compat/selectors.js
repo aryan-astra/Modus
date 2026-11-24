@@ -180,6 +180,40 @@ export function findSidebarRoot(root = document) {
   return explicit;
 }
 
+export const sidebarLandmark = 'aside, nav, [role="navigation"], [role="complementary"], [data-desktop-sidebar], [data-sidebar], [id*="sidebar" i], [data-testid*="sidebar" i], [aria-label="Chat history" i]';
+const conversationBody = 'main, [role="main"], [data-message-author-role], [role="dialog"], [role="menu"]';
+const hiddenSidebar = '[hidden], [inert], [aria-hidden="true"]';
+
+export function sidebarChatLinks(root) {
+  if (!root) return [];
+  const origin = root.ownerDocument.location.origin;
+  return [...root.querySelectorAll('a[href*="/c/"], a[href*="/uc/"]')].filter(link => {
+    if (link.closest(conversationBody) || link.closest(hiddenSidebar)) return false;
+    return link.origin === origin && /^\/(?:[^/]+\/)*(?:c|uc)\/[\w:%-]+\/?$/.test(link.pathname);
+  });
+}
+
+export function findHistorySidebar(root = document) {
+  let best = null;
+  let bestCount = 0;
+  const examined = new Set();
+  for (const region of root.querySelectorAll(sidebarLandmark)) {
+    if (region.closest(conversationBody) || region.closest(hiddenSidebar)) continue;
+    if (region.checkVisibility?.({ visibilityProperty: true }) === false &&
+        region.ownerDocument.defaultView.getComputedStyle(region).display !== 'contents') continue;
+    for (let owner = region; owner && owner !== root.body && owner !== root; owner = owner.parentElement) {
+      if (examined.has(owner) || owner.querySelector('main, [role="main"]')) break;
+      examined.add(owner);
+      const count = sidebarChatLinks(owner).length;
+      if (count > bestCount || (count === bestCount && count > 0 && best?.contains(owner))) {
+        best = owner;
+        bestCount = count;
+      }
+    }
+  }
+  return best;
+}
+
 export function extractId(href) {
   const m = href?.match(/\/(?:c|uc)\/([^/?#]+)/);
   return m ? m[1] : null;

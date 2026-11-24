@@ -1,6 +1,6 @@
 {
   "name": "modus",
-  "version": "3.9.5",
+  "version": "3.9.6",
   "type": "module",
   "dependencies": {
     "playwright": "^1.58.2"

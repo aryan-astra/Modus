@@ -14,6 +14,9 @@
   --knob: #fff;
   --unit: 4px;
   --motion: 140ms ease;
+  --release-bg: #edf3ff;
+  --release-icon-bg: #dce7ff;
+  --release-ink: #234caa;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -25,6 +28,9 @@
     --on: #ebebeb;
     --off: #727272;
     --knob: #222;
+    --release-bg: #222d45;
+    --release-icon-bg: #2e4065;
+    --release-ink: #c4d5ff;
   }
 }
 * { box-sizing: border-box; }
@@ -47,6 +53,47 @@ body {
 .header img { display: block; flex: none; border-radius: 6px; }
 .header h1 { margin: 0; font-size: 18px; letter-spacing: -.035em; font-weight: 650; }
 #ext-version { margin-inline-start: auto; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.release-notice {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 12px;
+  padding: 8px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--release-bg);
+  animation: release-arrive 220ms cubic-bezier(.2,.75,.3,1) both;
+}
+.release-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--release-ink);
+  background: var(--release-icon-bg);
+}
+.release-copy strong { display: block; font-size: 12px; font-weight: 680; }
+.release-copy p { margin: 1px 0 0; color: var(--muted); font-size: 11px; }
+#release-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  color: var(--release-ink);
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+#release-link:hover { background: var(--release-icon-bg); }
+#release-link:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+.visually-hidden { position: absolute; clip-path: inset(50%); overflow: hidden; width: 1px; height: 1px; white-space: nowrap; }
+@keyframes release-arrive {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .settings-columns {
   display: grid;
   grid-template-columns: 1fr 1.12fr;
@@ -119,7 +166,10 @@ body {
 .settings-help { margin-top: var(--unit); padding: calc(2 * var(--unit)) var(--unit) 0; border-top: 1px solid var(--rule); min-height: 49px; }
 .settings-help strong { font-size: 11px; font-weight: 650; }
 .settings-help p, #settings-status { color: var(--muted); margin: var(--unit) 0 0; font-size: 11px; }
-@media (prefers-reduced-motion: reduce) { .setting input, .setting input::before { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .release-notice { animation: none; }
+  .setting input, .setting input::before { transition: none; }
+}
 @media (forced-colors: active) {
   .setting input { border: 1px solid ButtonText; }
   .setting input::before { forced-color-adjust: none; background: ButtonText; top: 1px; }

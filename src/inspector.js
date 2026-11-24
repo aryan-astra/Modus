@@ -1,5 +1,6 @@
 import { modusIcon } from './ui-icons.js';
 import { SNIFF_SOURCE, conversationId, buildContextSnapshot, formatTokenCount } from './context-data.js';
+import { sidebarLandmark } from './compat/selectors.js';
 
 const observations = new Map();
 const conversationDates = new Map();
@@ -101,9 +102,8 @@ window.addEventListener('message', ingestObservation);
 window.postMessage({ source: SNIFF_SOURCE, phase: 'ready' }, location.origin);
 
 function getInspector() {
-  let inspector = document.getElementById('cgpt-top-inspector');
-  if (!inspector) {
-    inspector = document.createElement('section');
+  if (!activitySurface) {
+    const inspector = activitySurface = document.createElement('section');
     inspector.id = 'cgpt-top-inspector';
     inspector.setAttribute('aria-label', 'Modus chat activity');
     inspector.innerHTML = `
@@ -125,6 +125,7 @@ function getInspector() {
         panel.hidden = false;
         button.setAttribute('aria-expanded', 'true');
         renderInspectorDetails(panel, getInspectorSnapshot());
+        positionInspector();
         panel.focus();
       }
     });
@@ -134,7 +135,7 @@ function getInspector() {
     });
     document.body.append(inspector);
   }
-  return inspector;
+  return activitySurface;
 }
 
 function closeInspectorDetails(restoreFocus = false) {
@@ -154,21 +155,125 @@ document.addEventListener('keydown', event => {
   if (event.key === 'Escape') closeInspectorDetails(true);
 });
 
-function positionInspector(inspector = document.getElementById('cgpt-top-inspector')) {
-  if (!inspector) return;
-  const controls = [...document.querySelectorAll('header button, header [role="button"], [role="banner"] button')]
-    .map(button => button.getBoundingClientRect())
-    .filter(rect => rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.top < 54 &&
-      rect.left > innerWidth * 0.55);
-  const boundary = Math.min(innerWidth - 12, ...controls.map(rect => rect.left - 6));
-  const control = controls.find(rect => rect.left - 6 === boundary);
-  inspector.style.setProperty('--cgpt-toolbar-right', `${Math.round(innerWidth - boundary)}px`);
-  inspector.style.setProperty('--cgpt-toolbar-top', `${control ? Math.round(Math.max(4, control.top + (control.height - 36) / 2)) : 8}px`);
+const activityLandmark = 'header, [role="banner"], [role="toolbar"], [role="tablist"]';
+const activityControl = 'button, a[href], input, [role="button"], [role="tab"], [role="switch"], [role="radio"], [role="combobox"], [data-modus-title], [data-testid="conversation-title"]';
+const ignoredActivityArea = '#cgpt-top-inspector, #cgpt-action-bar, [role="dialog"], [role="menu"], [data-message-author-role], [data-message-role], [hidden], [inert], [aria-hidden="true"], [data-desktop-sidebar], [data-sidebar], [role="complementary"], [aria-label="Sidebar" i], [aria-label="Chat history" i]';
+const activityGap = 8;
+let activitySurface;
+let activityLayoutFrame = 0;
+const activityResize = typeof ResizeObserver === 'function' ? new ResizeObserver(queueActivityLayout) : null;
+const activityObserved = new Set();
+
+function queueActivityLayout() {
+  if (!activitySurface || activityLayoutFrame) return;
+  activityLayoutFrame = requestAnimationFrame(() => {
+    activityLayoutFrame = 0;
+    positionInspector();
+  });
 }
+
+function observeActivityLayout(elements) {
+  if (!activityResize) return;
+  const next = new Set(elements);
+  for (const element of activityObserved) {
+    if (next.has(element)) continue;
+    activityResize.unobserve(element);
+    activityObserved.delete(element);
+  }
+  for (const element of next) {
+    if (activityObserved.has(element)) continue;
+    activityResize.observe(element);
+    activityObserved.add(element);
+  }
+}
+
+function activitySlot(left, right, top, width, height, occupied) {
+  let x = right - width;
+  for (const rect of occupied) {
+    if (rect.top >= top + height + activityGap || rect.bottom + activityGap <= top) continue;
+    if (x < rect.right + activityGap && x + width > rect.left - activityGap) x = rect.left - activityGap - width;
+  }
+  return x >= left ? x : null;
+}
+
+function positionInspector() {
+  const inspector = activitySurface;
+  if (!inspector) return;
+  const host = document.fullscreenElement || document.body;
+  if (inspector.parentElement !== host) host.append(inspector);
+  const viewport = window.visualViewport;
+  const visible = {
+    left: viewport?.offsetLeft || 0, top: viewport?.offsetTop || 0,
+    right: (viewport?.offsetLeft || 0) + (viewport?.width || innerWidth),
+    bottom: (viewport?.offsetTop || 0) + (viewport?.height || innerHeight),
+  };
+  const mainSelector = 'main, [role="main"]';
+  const composer = host.querySelector('#prompt-textarea');
+  const main = host.matches(mainSelector) ? host : composer?.closest(mainSelector) ||
+    [...host.querySelectorAll(mainSelector)].find(region => region.getBoundingClientRect().width > 0);
+  const mainRect = main?.getBoundingClientRect();
+  const content = mainRect?.width ? mainRect : visible;
+  const contentLeft = Math.max(visible.left, content.left);
+  const contentRight = Math.min(visible.right, content.right);
+  const contentTop = Math.max(visible.top, content.top);
+  const left = contentLeft + activityGap;
+  const right = contentRight - activityGap;
+  const button = inspector.querySelector('.cgpt-topbtn');
+  const setPixels = (name, value) => {
+    const length = value + 'px';
+    if (inspector.style.getPropertyValue(name) !== length) inspector.style.setProperty(name, length);
+  };
+  setPixels('--cgpt-toolbar-max-width', Math.max(0, right - left));
+  const buttonRect = button.getBoundingClientRect();
+  const height = buttonRect.height || 36;
+  const width = button.hidden ? Math.min(36, right - left) : buttonRect.width || Math.min(120, right - left);
+  const bandBottom = contentTop + height * 2;
+  const observed = [host, button, ...(main && main !== host ? [main] : [])];
+  const occupied = [];
+  for (const element of host.querySelectorAll(activityLandmark + ', ' + activityControl)) {
+    if (element.closest(ignoredActivityArea)) continue;
+    const rect = element.getBoundingClientRect();
+    if (!rect.width || !rect.height || rect.bottom <= visible.top || rect.top >= bandBottom ||
+        rect.left >= contentRight || rect.right <= contentLeft ||
+        element.checkVisibility?.({ visibilityProperty: true }) === false) continue;
+    observed.push(element);
+    // Full-width headers supply the row height. Their children supply the occupied space.
+    if (!element.matches(activityLandmark) || element.matches('[role="tablist"]') ||
+        rect.width < contentRight - contentLeft - activityGap * 2) occupied.push(rect);
+  }
+  observeActivityLayout(observed);
+  occupied.sort((a, b) => b.right - a.right);
+  const firstControl = occupied.reduce((first, rect) => !first || rect.top < first.top ? rect : first, null);
+  let top = firstControl ? Math.max(visible.top + activityGap, firstControl.top + (firstControl.height - height) / 2) :
+    contentTop + activityGap;
+  let x = activitySlot(left, right, top, width, height, occupied);
+  if (x === null) {
+    top = Math.max(top, ...occupied.map(rect => rect.bottom + activityGap));
+    x = right - width;
+  }
+  const panelWidth = Math.min(286, right - left);
+  const panelTop = top + (button.hidden ? 0 : height + activityGap);
+  inspector.toggleAttribute('data-positioned', right > left && panelTop < visible.bottom);
+  setPixels('--cgpt-toolbar-left', x);
+  setPixels('--cgpt-toolbar-top', top);
+  setPixels('--cgpt-panel-left', Math.max(left, Math.min(x + width - panelWidth, right - panelWidth)));
+  setPixels('--cgpt-panel-top', panelTop);
+  setPixels('--cgpt-panel-width', Math.max(0, panelWidth));
+  setPixels('--cgpt-panel-height', Math.max(0, visible.bottom - panelTop - activityGap));
+}
+
+document.addEventListener('fullscreenchange', queueActivityLayout);
+document.addEventListener('transitionend', event => {
+  if (event.target.closest?.(activityLandmark + ', ' + sidebarLandmark)) queueActivityLayout();
+});
+window.visualViewport?.addEventListener('resize', queueActivityLayout);
+window.visualViewport?.addEventListener('scroll', queueActivityLayout);
 
 function renderInspector() {
   if (!_s.modelBadge && !_s.contextBar && !_s.contextWarning) {
-    document.getElementById('cgpt-top-inspector')?.remove();
+    activitySurface?.remove();
+    activitySurface = null;
+    observeActivityLayout([]);
     return;
   }
   const snapshot = getInspectorSnapshot();
@@ -188,7 +293,7 @@ function renderInspector() {
   const ratio = snapshot.used !== null && snapshot.total !== null ? snapshot.used / snapshot.total : null;
   inspector.querySelector('.cgpt-context-warning').hidden =
     !_s.contextWarning || ratio === null || ratio < 0.9 || snapshot.at === dismissedWarning;
-  positionInspector(inspector);
+  positionInspector();
 }
 
 function resetLabel(value, observedAt) {

@@ -1,23 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Modus",
-  "version": "3.5.2",
-  "description": "Fixes typing lag with DOM virtualization and adds bulk sidebar management (select, archive, delete).",
+  "version": "3.9.5",
+  "description": "Typing lag fix, bulk sidebar management, model badge, context awareness, inline chat rename, and export.",
   "permissions": [
-    "activeTab",
-    "scripting",
-    "webRequest",
-    "storage",
-    "tabs"
-  ],
-  "host_permissions": [
-    "*://chatgpt.com/*",
-    "*://*.chatgpt.com/*",
-    "*://chat.openai.com/*",
-    "*://*.openai.com/*"
+    "storage"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "icons": {
     "16": "assets/modus-16x16.png",
@@ -38,14 +29,28 @@
   "content_scripts": [
     {
       "matches": [
-        "*://chatgpt.com/*",
-        "*://*.chatgpt.com/*",
-        "*://chat.openai.com/*",
-        "*://*.openai.com/*"
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
       ],
-      "js": ["content.js"],
-      "css": ["styles.css"],
-      "run_at": "document_idle"
+      "js": [
+        "net-sniffer.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "styles.css"
+      ],
+      "run_at": "document_start"
     }
-  ]
+  ],
+  "minimum_chrome_version": "111"
 }

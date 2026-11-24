@@ -2,67 +2,34 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Modus</title>
+  <link rel="icon" href="assets/modus-32x32.png">
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-
-  <div class="header">
-    <div class="header-left">
-      <img class="logo-icon" src="assets/modus-128x128.png" alt="Modus" draggable="false">
-      <span class="logo-text">Modus</span>
+  <main class="settings">
+    <header class="header">
+      <img src="assets/modus-48x48.png" width="26" height="26" alt="">
+      <h1>Modus</h1>
+      <span id="ext-version"></span>
+    </header>
+    <div class="settings-columns">
+      <section aria-labelledby="activity-title">
+        <h2 id="activity-title">Activity</h2>
+        <div id="activity-settings"></div>
+      </section>
+      <section aria-labelledby="workspace-title">
+        <h2 id="workspace-title">Workspace</h2>
+        <div id="workspace-settings"></div>
+      </section>
     </div>
-    <span class="version" id="ext-version">v3.5.1</span>
-  </div>
-
-  <div class="section-label">Performance</div>
-  <div class="toggle-row" data-key="lagFix">
-    <span class="row-title">Typing Lag Fix</span>
-    <label class="switch"><input type="checkbox"><span class="slider"></span></label>
-  </div>
-  <div class="toggle-row" data-key="compactSidebar">
-    <span class="row-title">Compact Sidebar</span>
-    <label class="switch"><input type="checkbox"><span class="slider"></span></label>
-  </div>
-
-  <div class="section-label">Productivity</div>
-  <div class="toggle-row" data-key="bulkActions">
-    <span class="row-title">Bulk Archive / Delete</span>
-    <label class="switch"><input type="checkbox"><span class="slider"></span></label>
-  </div>
-  <div class="toggle-row" data-key="dateGroups">
-    <span class="row-title">Organize by Date</span>
-    <label class="switch"><input type="checkbox"><span class="slider"></span></label>
-  </div>
-
-  <div class="section-label">Tools</div>
-  <div class="toggle-row" data-key="modelBadge">
-    <span class="row-title">Model Badge</span>
-    <label class="switch"><input type="checkbox"><span class="slider"></span></label>
-  </div>
-  <div class="toggle-row" data-key="contextBar">
-    <span class="row-title">Context % Bar</span>
-    <label class="switch"><input type="checkbox"><span class="slider"></span></label>
-  </div>
-  <div class="toggle-row" data-key="contextWarning">
-    <span class="row-title">Context Limit Warning</span>
-    <label class="switch"><input type="checkbox"><span class="slider"></span></label>
-  </div>
-
-  <div class="section-label section-label--alpha">Experimental</div>
-  <div class="toggle-row toggle-row--alpha" data-key="alphaMode">
-    <div class="alpha-label-group">
-      <span class="row-title">Enable Alpha Mode</span>
-      <span class="alpha-badge">EXPERIMENTAL</span>
-    </div>
-    <label class="switch"><input type="checkbox"><span class="slider"></span></label>
-  </div>
-  <div id="alpha-features" class="alpha-features">
-    <div class="alpha-item">🔒 Hide Chats</div>
-    <div class="alpha-item">🔐 Lock Chats</div>
-    <div class="alpha-item">📤 Export Chats</div>
-  </div>
-
-  <script src="popup.js"></script>
+    <aside class="settings-help" id="settings-help" aria-live="polite" aria-label="Setting details" hidden>
+      <strong id="help-title"></strong>
+      <p id="help-copy"></p>
+    </aside>
+    <p id="settings-status" role="status" hidden></p>
+  </main>
+  <script type="module" src="popup.js"></script>
 </body>
 </html>

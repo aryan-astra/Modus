@@ -65,6 +65,20 @@ jobs:
             exit 1
           fi
 
+      - name: Set up Node.js
+        if: steps.version.outputs.should_release == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Verify and build extension
+        if: steps.version.outputs.should_release == 'true'
+        run: |
+          npm ci
+          npm run build
+          npm test
+
       - name: Create release archive
         if: steps.version.outputs.should_release == 'true'
         id: archive
@@ -75,17 +89,14 @@ jobs:
             manifest.json \
             background.js \
             content.js \
+            net-sniffer.js \
+            src/settings.js \
             popup.html \
             popup.css \
             popup.js \
             styles.css \
-            package.json \
-            package-lock.json \
-            README.md \
             LICENSE \
-            TESTING.md \
-            assets/*.png \
-            tools/*.js
+            assets/modus-{16,32,48,128,512}x*.png
           echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub release

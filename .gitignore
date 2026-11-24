@@ -8,6 +8,9 @@ playwright-report/
 test-results/
 playwright-user-data/
 playwright-user-data-test/
+playwright-user-data-diagnostic/
+chatgpt-enhanced-canary-*/
+/modus-v*/
 *.zip
 
 # Logs and debug dumps
